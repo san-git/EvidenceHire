@@ -71,6 +71,16 @@ export default async function DashboardPage() {
         .limit(3)
     : { data: [] };
 
+  const getProjectName = (projects: unknown) => {
+    if (Array.isArray(projects)) {
+      return projects[0]?.name ?? "Project";
+    }
+    if (projects && typeof projects === "object" && "name" in projects) {
+      return (projects as { name?: string }).name ?? "Project";
+    }
+    return "Project";
+  };
+
   const totals = (projects ?? []).reduce(
     (acc, project) => {
       const roleCount = project.roles?.[0]?.count ?? 0;
@@ -188,7 +198,7 @@ export default async function DashboardPage() {
               (matchRuns ?? []).map((run) => (
                 <div className="card run-card" key={run.id}>
                   <div>
-                    <h3>{run.projects?.name ?? "Project"}</h3>
+                  <h3>{getProjectName(run.projects)}</h3>
                     <p className="muted">{run.notes ?? "Match run"}</p>
                   </div>
                   <div className="tag soft">{formatDate(run.created_at)}</div>
