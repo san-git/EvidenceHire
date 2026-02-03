@@ -37,6 +37,9 @@ export default function Home() {
       <nav className="nav">
         <div className="logo">EvidenceHire</div>
         <div className="nav-actions">
+          <a className="button ghost" href="/dashboard">
+            Workspace
+          </a>
           <a className="button ghost" href="/match">
             Try matching
           </a>

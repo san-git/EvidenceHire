@@ -28,6 +28,12 @@ graph TD
 - Matching: Embed documents, compute similarity, and generate evidence.
 - Reviewer: Summarize top evidence and gaps for each candidate.
 
+## Matching API (beta)
+
+- Endpoint: `POST /api/match`
+- Current scoring: token overlap with evidence sentence extraction.
+- Planned: swap to embeddings + pgvector similarity for production.
+
 ## Security and privacy
 
 - Store resumes encrypted at rest with strict access controls.
