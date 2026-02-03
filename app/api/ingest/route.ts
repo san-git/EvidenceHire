@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { extractTextFromFile } from "@/lib/parsers/extractText";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { embedTexts, shouldUseEmbeddings } from "@/lib/matching/embeddings";
 
 export const runtime = "nodejs";
@@ -24,7 +24,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No files received." }, { status: 400 });
     }
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    let supabaseAdmin: ReturnType<typeof createSupabaseAdmin>;
+    try {
+      supabaseAdmin = createSupabaseAdmin();
+    } catch (error) {
       return NextResponse.json(
         { error: "Supabase admin credentials are not configured." },
         { status: 500 }
