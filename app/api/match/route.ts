@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { embedTexts, shouldUseEmbeddings } from "@/lib/matching/embeddings";
 import { computeMatches, JDInput, ResumeInput } from "@/lib/matching/scoring";
 
 const normalizeEntries = (items: Array<{ text: string; title?: string; name?: string }>, prefix: string) =>
@@ -28,13 +29,49 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = computeMatches(jds, resumes);
+    let embeddingMeta: Record<string, string | number | null> = {
+      provider: null,
+      model: null
+    };
+    let jdEmbeddings: number[][] | undefined;
+    let resumeEmbeddings: number[][] | undefined;
+
+    if (shouldUseEmbeddings()) {
+      try {
+        const [jdBatch, resumeBatch] = await Promise.all([
+          embedTexts(jds.map((item) => item.text)),
+          embedTexts(resumes.map((item) => item.text))
+        ]);
+        jdEmbeddings = jdBatch?.vectors;
+        resumeEmbeddings = resumeBatch?.vectors;
+        embeddingMeta = {
+          provider: jdBatch?.provider ?? null,
+          model: jdBatch?.model ?? null
+        };
+      } catch (error) {
+        embeddingMeta = { provider: "openai", model: "error" };
+      }
+    }
+
+    const embeddingWeight = Number(process.env.MATCH_EMBEDDING_WEIGHT ?? "0.7");
+    const safeWeight =
+      Number.isFinite(embeddingWeight) && embeddingWeight >= 0 && embeddingWeight <= 1
+        ? embeddingWeight
+        : 0.7;
+
+    const result = computeMatches(jds, resumes, {
+      jdEmbeddings,
+      resumeEmbeddings,
+      embeddingWeight: safeWeight
+    });
 
     return NextResponse.json({
       ...result,
       meta: {
         jdCount: jds.length,
-        resumeCount: resumes.length
+        resumeCount: resumes.length,
+        embedding: embeddingMeta,
+        embeddingWeight: safeWeight
       }
     });
   } catch (error) {

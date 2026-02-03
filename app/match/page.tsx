@@ -1,6 +1,12 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent } from "react";
+import {
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type Dispatch,
+  type SetStateAction
+} from "react";
 
 type MatchResult = {
   resumeId: string;
@@ -8,6 +14,8 @@ type MatchResult = {
   jdId: string;
   jdTitle: string;
   score: number;
+  method?: string;
+  embeddingScore?: number | null;
   evidence: string[];
   gaps: string[];
 };
@@ -57,20 +65,60 @@ export default function MatchPage() {
   const [results, setResults] = useState<MatchResult[]>([]);
   const [bestByResume, setBestByResume] = useState<Record<string, MatchResult>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isParsingJD, setIsParsingJD] = useState(false);
+  const [isParsingResume, setIsParsingResume] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const parsedJds = useMemo(() => parseBlocks(jdText, "JD"), [jdText]);
   const parsedResumes = useMemo(() => parseBlocks(resumeText, "Resume"), [resumeText]);
 
-  const handleFileAppend = async (
+  const buildBlock = (label: "JD" | "Resume", filename: string, text: string) => {
+    const title = filename.replace(/\.[^/.]+$/, "");
+    const header = label === "JD" ? "Title" : "Name";
+    return `${header}: ${title}\n${text}`;
+  };
+
+  const parseFiles = async (
     event: ChangeEvent<HTMLInputElement>,
-    setter: React.Dispatch<React.SetStateAction<string>>
+    label: "JD" | "Resume",
+    setter: Dispatch<SetStateAction<string>>
   ) => {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
 
-    const contents = await Promise.all(files.map((file) => file.text()));
-    setter((prev) => [prev.trim(), ...contents].filter(Boolean).join("\n---\n"));
+    label === "JD" ? setIsParsingJD(true) : setIsParsingResume(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file));
+
+      const response = await fetch("/api/parse", { method: "POST", body: formData });
+      const data = (await response.json()) as {
+        files?: Array<{ filename: string; text: string }>;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to parse files.");
+      }
+
+      const blocks =
+        data.files
+          ?.filter((item) => item.text && item.text.length > 0)
+          .map((item) => buildBlock(label, item.filename, item.text)) ?? [];
+
+      if (blocks.length === 0) {
+        throw new Error("No readable text found in the uploaded files.");
+      }
+
+      setter((prev) => [prev.trim(), ...blocks].filter(Boolean).join("\n---\n"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to parse files.");
+    } finally {
+      label === "JD" ? setIsParsingJD(false) : setIsParsingResume(false);
+      event.target.value = "";
+    }
   };
 
   const runMatch = async () => {
@@ -146,15 +194,16 @@ export default function MatchPage() {
               />
             </label>
             <label className="field">
-              <span>Upload JD files (.txt for now)</span>
+              <span>Upload JD files (.pdf, .docx, .txt)</span>
               <input
                 className="input"
                 type="file"
-                accept=".txt"
+                accept=".txt,.pdf,.docx"
                 multiple
-                onChange={(event) => handleFileAppend(event, setJdText)}
+                onChange={(event) => parseFiles(event, "JD", setJdText)}
               />
             </label>
+            {isParsingJD ? <p className="muted">Parsing JD files...</p> : null}
           </div>
 
           <div className="panel">
@@ -173,15 +222,16 @@ export default function MatchPage() {
               />
             </label>
             <label className="field">
-              <span>Upload resume files (.txt for now)</span>
+              <span>Upload resume files (.pdf, .docx, .txt)</span>
               <input
                 className="input"
                 type="file"
-                accept=".txt"
+                accept=".txt,.pdf,.docx"
                 multiple
-                onChange={(event) => handleFileAppend(event, setResumeText)}
+                onChange={(event) => parseFiles(event, "Resume", setResumeText)}
               />
             </label>
+            {isParsingResume ? <p className="muted">Parsing resume files...</p> : null}
           </div>
         </div>
 
@@ -215,6 +265,12 @@ export default function MatchPage() {
                   <p>Matched to: {match.jdTitle}</p>
                   <p className="muted">Top evidence: {match.evidence[0] ?? ""}</p>
                   <p className="muted">Gaps to validate: {match.gaps.slice(0, 2).join(", ")}</p>
+                  <p className="muted">
+                    Method: {match.method ?? "evidence"}{" "}
+                    {match.embeddingScore !== null && match.embeddingScore !== undefined
+                      ? `(embedding ${match.embeddingScore})`
+                      : ""}
+                  </p>
                 </div>
               </div>
             ))

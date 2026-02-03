@@ -33,6 +33,8 @@ npm run dev
 
 3. Open `http://localhost:3000`
 
+4. Visit `/login` to sign in and create your first project.
+
 ## Environment variables
 
 Create a `.env.local` with the following:
@@ -40,15 +42,23 @@ Create a `.env.local` with the following:
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_UPLOAD_BUCKET=resumes
 OPENAI_API_KEY=
+OPENAI_BASE_URL=
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+MATCH_USE_EMBEDDINGS=true
+MATCH_EMBEDDING_WEIGHT=0.7
 ```
 
 ## Supabase setup
 
 1. Create a Supabase project.
 2. Run the schema in `supabase/schema.sql` (SQL editor).
-3. Create a Storage bucket named `resumes` for file uploads.
+3. Create a Storage bucket named `resumes` for file uploads (or set `SUPABASE_UPLOAD_BUCKET`).
 4. Add your project URL and anon key to `.env.local`.
+5. Add your service role key if you plan to ingest files server-side.
 
 ## Matching API
 
@@ -63,6 +73,25 @@ POST `/api/match` with:
 
 The current scoring uses evidence-based token overlap for the beta. Replace with embeddings
 when you wire the production pipeline.
+
+## File parsing
+
+POST `/api/parse` with multipart form data using `files` fields. Supported formats:
+
+- `.pdf`
+- `.docx`
+- `.txt`
+
+## Ingestion API
+
+POST `/api/ingest` with multipart form data:
+
+- `projectId`
+- `type` = `role` or `candidate`
+- `files` (PDF/DOCX/TXT)
+
+This will parse, optionally embed, upload to Supabase Storage, and insert rows into `roles`
+or `candidates`.
 
 ## Product docs
 

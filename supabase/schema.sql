@@ -1,4 +1,5 @@
 create extension if not exists "pgcrypto";
+create extension if not exists "vector";
 
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -32,6 +33,8 @@ create table if not exists roles (
   location text,
   level text,
   jd_text text,
+  jd_file_path text,
+  jd_embedding vector(1536),
   created_at timestamptz default now()
 );
 
@@ -42,6 +45,8 @@ create table if not exists candidates (
   email text,
   source text,
   resume_text text,
+  resume_file_path text,
+  resume_embedding vector(1536),
   created_at timestamptz default now()
 );
 
@@ -125,6 +130,15 @@ create policy "Owners can manage memberships" on project_members
       where pm.project_id = project_members.project_id
       and pm.user_id = auth.uid()
       and pm.role = 'owner'
+    )
+  );
+
+create policy "Project creators can add themselves" on project_members
+  for insert with check (
+    exists (
+      select 1 from projects p
+      where p.id = project_members.project_id
+      and p.created_by = auth.uid()
     )
   );
 
@@ -214,3 +228,9 @@ create policy "Members can add notes" on notes
       and pm.user_id = auth.uid()
     )
   );
+
+create index if not exists roles_embedding_idx on roles
+  using ivfflat (jd_embedding vector_cosine_ops) with (lists = 100);
+
+create index if not exists candidates_embedding_idx on candidates
+  using ivfflat (resume_embedding vector_cosine_ops) with (lists = 100);

@@ -143,6 +143,8 @@ export type MatchResult = {
   jdId: string;
   jdTitle: string;
   score: number;
+  method: "evidence" | "embedding+evidence";
+  embeddingScore?: number | null;
   evidence: string[];
   gaps: string[];
 };
@@ -150,6 +152,12 @@ export type MatchResult = {
 export type MatchResponse = {
   results: MatchResult[];
   bestByResume: Record<string, MatchResult>;
+};
+
+export type EmbeddingOptions = {
+  jdEmbeddings?: number[][];
+  resumeEmbeddings?: number[][];
+  embeddingWeight?: number;
 };
 
 const splitSentences = (text: string) =>
@@ -203,13 +211,34 @@ const extractEvidence = (resumeText: string, overlapTokens: string[]) => {
   return overlapTokens.slice(0, 3);
 };
 
-const scorePair = (jdText: string, resumeText: string) => {
+const cosineSimilarity = (a: number[], b: number[]) => {
+  if (a.length !== b.length || a.length === 0) return 0;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+};
+
+const scorePair = (
+  jdText: string,
+  resumeText: string,
+  embeddingSimilarity?: number | null,
+  embeddingWeight = 0.7
+) => {
   const jdTokens = tokenize(jdText);
   const resumeTokens = tokenize(resumeText);
 
   if (jdTokens.length === 0 || resumeTokens.length === 0) {
     return {
       score: 0,
+      method: "evidence" as const,
+      embeddingScore: null,
       evidence: [],
       gaps: []
     };
@@ -223,32 +252,60 @@ const scorePair = (jdText: string, resumeText: string) => {
   const coverage = overlapUnique.length / new Set(jdTokens).size;
   const jaccard = overlapUnique.length / new Set([...jdSet, ...resumeSet]).size;
 
-  const baseScore = 100 * (0.65 * coverage + 0.35 * jaccard);
+  const tokenScore = 100 * (0.65 * coverage + 0.35 * jaccard);
+  let finalScore = tokenScore;
+  let embeddingScore: number | null = null;
+  let method: MatchResult["method"] = "evidence";
+
+  if (typeof embeddingSimilarity === "number") {
+    const normalized = Math.max(0, Math.min(1, (embeddingSimilarity + 1) / 2));
+    embeddingScore = clampScore(normalized * 100);
+    finalScore = 100 * (embeddingWeight * normalized + (1 - embeddingWeight) * coverage);
+    method = "embedding+evidence";
+  }
 
   const evidence = extractEvidence(resumeText, overlapUnique);
   const gaps = topTokens(jdTokens.filter((token) => !resumeSet.has(token)), 5);
 
   return {
-    score: clampScore(baseScore),
+    score: clampScore(finalScore),
+    method,
+    embeddingScore,
     evidence,
     gaps
   };
 };
 
-export const computeMatches = (jds: JDInput[], resumes: ResumeInput[]): MatchResponse => {
+export const computeMatches = (
+  jds: JDInput[],
+  resumes: ResumeInput[],
+  options: EmbeddingOptions = {}
+): MatchResponse => {
   const results: MatchResult[] = [];
   const bestByResume: Record<string, MatchResult> = {};
+  const embeddingWeight = options.embeddingWeight ?? 0.7;
 
-  resumes.forEach((resume) => {
+  resumes.forEach((resume, resumeIndex) => {
     let bestMatch: MatchResult | null = null;
-    jds.forEach((jd) => {
-      const { score, evidence, gaps } = scorePair(jd.text, resume.text);
+    jds.forEach((jd, jdIndex) => {
+      const jdEmbedding = options.jdEmbeddings?.[jdIndex];
+      const resumeEmbedding = options.resumeEmbeddings?.[resumeIndex];
+      const similarity =
+        jdEmbedding && resumeEmbedding ? cosineSimilarity(jdEmbedding, resumeEmbedding) : null;
+      const { score, method, embeddingScore, evidence, gaps } = scorePair(
+        jd.text,
+        resume.text,
+        similarity,
+        embeddingWeight
+      );
       const match: MatchResult = {
         resumeId: resume.id,
         resumeName: resume.name,
         jdId: jd.id,
         jdTitle: jd.title,
         score,
+        method,
+        embeddingScore,
         evidence,
         gaps
       };

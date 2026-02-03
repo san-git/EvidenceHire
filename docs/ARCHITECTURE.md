@@ -34,6 +34,11 @@ graph TD
 - Current scoring: token overlap with evidence sentence extraction.
 - Planned: swap to embeddings + pgvector similarity for production.
 
+## Parsing + ingestion
+
+- Endpoint: `POST /api/parse` to extract text from PDF/DOCX/TXT.
+- Endpoint: `POST /api/ingest` to store parsed text + embeddings in Supabase.
+
 ## Security and privacy
 
 - Store resumes encrypted at rest with strict access controls.

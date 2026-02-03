@@ -32,6 +32,13 @@ a {
   text-decoration: none;
 }
 
+code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #f3e8e1;
+  font-size: 0.9em;
+}
+
 .page {
   padding: 32px 6vw 64px;
   display: flex;
@@ -373,6 +380,12 @@ a {
 .auth-form {
   display: grid;
   gap: 16px;
+}
+
+.project-form {
+  display: grid;
+  gap: 16px;
+  max-width: 420px;
 }
 
 .dashboard-page {
