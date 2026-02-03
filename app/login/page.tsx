@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { supabase } from "@/lib/supabase/client";
+import { getSupabaseClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -16,6 +16,11 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        throw new Error("Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      }
+
       const { error: signInError } = await supabase.auth.signInWithOtp({
         email,
         options: {
